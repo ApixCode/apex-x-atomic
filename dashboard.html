@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>API Dashboard</h1>
+            <button id="logoutButton">Logout</button>
+        </header>
+
+        <section id="home">
+            <h2>Home</h2>
+            <p>Welcome, <span id="ownerName"></span>!</p>
+            <p>Requests Remaining: <span id="requestsLeft"></span></p>
+        </section>
+
+        <section id="endpoints">
+            <h2>Endpoints</h2>
+            <p>To use the API, send a GET request to:</p>
+            <code>/apex/bypass?url={your_url}</code>
+            <p>Include your key in the header:</p>
+            <code>registered-key: YOUR_API_KEY</code>
+
+            <h3>Test the API</h3>
+            <input type="text" id="urlToTest" placeholder="Enter a URL to bypass...">
+            <button id="testApiButton">Test Endpoint</button>
+            <pre id="testResult"></pre>
+        </section>
+
+        <section id="suggestion">
+            <h2>Suggestions</h2>
+            <textarea id="suggestionText" placeholder="Have an idea? Let us know!"></textarea>
+            <button id="submitSuggestion">Submit</button>
+             <p id="suggestionStatus"></p>
+        </section>
+
+        <section id="status">
+            <h2>API Status</h2>
+            <p>Successful Bypasses: <span id="successfulBypasses"></span></p>
+            <p>Failed Bypasses: <span id="failedBypasses"></span></p>
+            <p>Last Bypassed URL: <span id="lastUrl"></span></p>
+        </section>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>
