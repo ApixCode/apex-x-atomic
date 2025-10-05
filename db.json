@@ -1,0 +1,8 @@
+{
+  "api_keys": {},
+  "status": {
+    "successful_bypasses": 0,
+    "failed_bypasses": 0,
+    "last_bypassed_url": "None"
+  }
+}
