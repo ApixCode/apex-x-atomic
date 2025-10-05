@@ -1,0 +1,152 @@
+const express = require('express');
+const axios = require('axios');
+const fs = require('fs');
+const crypto = require('crypto');
+const rateLimit = require('express-rate-limit');
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+const DB_PATH = './db.json';
+
+// Helper function to read from our JSON database
+const readDB = () => {
+    const data = fs.readFileSync(DB_PATH, 'utf-8');
+    return JSON.parse(data);
+};
+
+// Helper function to write to our JSON database
+const writeDB = (data) => {
+    fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2));
+};
+
+// Rate limiter: 1 request per 10 seconds per key
+const apiLimiter = rateLimit({
+    windowMs: 10 * 1000, // 10 seconds
+    max: 1,
+    message: { status: "failed", result: "Cooldown: Please wait 10 seconds before your next request." },
+    keyGenerator: (req, res) => {
+        return req.headers['registered-key']; // Rate limit based on the API key
+    },
+    standardHeaders: true,
+    legacyHeaders: false,
+});
+
+
+// Endpoint to generate a key
+app.get('/apex/qKey', (req, res) => {
+    const { qKey, owner } = req.query;
+
+    if (!qKey || !owner) {
+        return res.status(400).json({ error: "Missing 'qKey' (requests) or 'owner' query parameter." });
+    }
+
+    const generateRandom = () => {
+        const letters = 'abcdefghijklmnopqrstuvwxyz';
+        const numbers = '0123456789';
+        let result = '';
+        for (let i = 0; i < 5; i++) result += letters.charAt(Math.floor(Math.random() * letters.length));
+        for (let i = 0; i < 3; i++) result += numbers.charAt(Math.floor(Math.random() * numbers.length));
+        return result.split('').sort(() => 0.5 - Math.random()).join(''); // Shuffle characters
+    };
+
+    const newKey = `apex-${generateRandom()}-${generateRandom()}-${generateRandom()}`;
+    const requests = qKey.toLowerCase() === 'perm' ? 'permanent' : parseInt(qKey, 10);
+
+    const db = readDB();
+    db.api_keys[newKey] = {
+        owner: owner,
+        requests: requests,
+        requests_used: 0
+    };
+    writeDB(db);
+
+    res.json({ success: true, key: newKey, owner: owner, requests: requests });
+});
+
+// The main bypass endpoint
+app.get('/apex/bypass', apiLimiter, async (req, res) => {
+    const apiKey = req.headers['registered-key'];
+    const { url } = req.query;
+    const startTime = Date.now();
+
+    if (!apiKey) {
+        return res.status(401).json({ status: "failed", result: "API key is required in 'registered-key' header." });
+    }
+    if (!url) {
+        return res.status(400).json({ status: "failed", result: "URL parameter is required." });
+    }
+
+    const db = readDB();
+    const keyData = db.api_keys[apiKey];
+
+    if (!keyData) {
+        return res.status(403).json({ status: "failed", result: "Invalid API key." });
+    }
+
+    if (keyData.requests !== 'permanent' && keyData.requests_used >= keyData.requests) {
+        return res.status(429).json({ status: "failed", result: "API key has no requests left." });
+    }
+
+    try {
+        const targetApiUrl = `https://lucy-api.vercel.app/api/bypass?apikey=kevinehub&url=${encodeURIComponent(url)}`;
+        const response = await axios.get(targetApiUrl);
+
+        if (response.data && response.data.result) {
+            // Success
+            db.status.successful_bypasses += 1;
+            db.status.last_bypassed_url = url;
+            if (keyData.requests !== 'permanent') {
+                keyData.requests_used += 1;
+            }
+            writeDB(db);
+
+            const responseTime = ((Date.now() - startTime) / 1000).toFixed(2);
+            res.json({
+                status: "success",
+                result: response.data.result,
+                response_time: `${responseTime}s`
+            });
+        } else {
+            throw new Error("Invalid response from the rehosted API.");
+        }
+    } catch (error) {
+        // Failure
+        db.status.failed_bypasses += 1;
+        writeDB(db);
+
+        const responseTime = ((Date.now() - startTime) / 1000).toFixed(2);
+        res.status(500).json({
+            status: "failed",
+            result: error.message || "An error occurred while trying to bypass the URL.",
+            response_time: `${responseTime}s`
+        });
+    }
+});
+
+
+// Endpoint to get API key info
+app.get('/apex/key-info', (req, res) => {
+    const apiKey = req.headers['registered-key'];
+    if (!apiKey) {
+        return res.status(401).json({ error: "API key is required in 'registered-key' header." });
+    }
+
+    const db = readDB();
+    const keyData = db.api_keys[apiKey];
+
+    if (!keyData) {
+        return res.status(404).json({ error: "API key not found." });
+    }
+    res.json(keyData);
+});
+
+// Endpoint to get API status
+app.get('/apex/status', (req, res) => {
+    const db = readDB();
+    res.json(db.status);
+});
+
+
+app.listen(PORT, () => {
+    console.log(`Server is running on port ${PORT}`);
+});
